@@ -47,7 +47,7 @@ sub read_cpan_html {
 <head>
     <title>Perl Source - www.cpan.org</title>
     <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />    <link rel="author" href="mailto:cpan+linkrelauthor@perl.org" />
-	<link rel="canonical" href="http://www.cpan.org/src/index.html" />
+	<link rel="canonical" href="https://www.cpan.org/src/index.html" />
 	<link type="text/css" rel="stylesheet" href="../misc/css/cpan.css" />
 
 </head>
@@ -114,7 +114,7 @@ sub read_cpan_html {
 
 
 <pre>
-     wget <a href="http://www.cpan.org/src/perl-5.12.3.tar.gz">http://www.cpan.org/src/perl-5.12.3.tar.gz</a>
+     wget <a href="https://www.cpan.org/src/perl-5.12.3.tar.gz">https://www.cpan.org/src/perl-5.12.3.tar.gz</a>
      tar -xzf perl-5.12.3.tar.gz
      cd perl-5.12.3
      ./Configure -des -Dprefix=$HOME/localperl
@@ -158,7 +158,7 @@ sub read_cpan_html {
         <td>5.12.5
         <td>Maint</td>
         <td>2011-01-22</td>
-        <td><a href="http://www.cpan.org/src/perl-5.12.5.tar.gz">perl-5.12.5.tar.gz</a></td>
+        <td><a href="https://www.cpan.org/src/perl-5.12.5.tar.gz">perl-5.12.5.tar.gz</a></td>
     </tr>
 
 
@@ -167,7 +167,7 @@ sub read_cpan_html {
         <td>5.10.1
         <td>Maint</td>
         <td>2009-08-23</td>
-        <td><a href="http://www.cpan.org/src/perl-5.10.1.tar.gz">perl-5.10.1.tar.gz</a></td>
+        <td><a href="https://www.cpan.org/src/perl-5.10.1.tar.gz">perl-5.10.1.tar.gz</a></td>
     </tr>
 
 
@@ -176,7 +176,7 @@ sub read_cpan_html {
         <td>5.8.9
         <td>Maint</td>
         <td>2008-12-14</td>
-        <td><a href="http://www.cpan.org/src/perl-5.8.9.tar.gz">perl-5.8.9.tar.gz</a></td>
+        <td><a href="https://www.cpan.org/src/perl-5.8.9.tar.gz">perl-5.8.9.tar.gz</a></td>
     </tr>
 
 
@@ -185,7 +185,7 @@ sub read_cpan_html {
         <td>5.6.2
         <td>Maint</td>
         <td>2003-11-15</td>
-        <td><a href="http://www.cpan.org/src/perl-5.6.2.tar.gz">perl-5.6.2.tar.gz</a></td>
+        <td><a href="https://www.cpan.org/src/perl-5.6.2.tar.gz">perl-5.6.2.tar.gz</a></td>
     </tr>
 
 
@@ -194,7 +194,7 @@ sub read_cpan_html {
         <td>5.5.4
         <td>Maint</td>
         <td>2004-02-23</td>
-        <td><a href="http://www.cpan.org/src/perl5.005_04.tar.gz">perl5.005_04.tar.gz</a></td>
+        <td><a href="https://www.cpan.org/src/perl5.005_04.tar.gz">perl5.005_04.tar.gz</a></td>
     </tr>
 
 
@@ -203,7 +203,7 @@ sub read_cpan_html {
         <td>5.4.5
         <td>Maint</td>
         <td>1999-04-29</td>
-        <td><a href="http://www.cpan.org/src/perl5.004_05.tar.gz">perl5.004_05.tar.gz</a></td>
+        <td><a href="https://www.cpan.org/src/perl5.004_05.tar.gz">perl5.004_05.tar.gz</a></td>
     </tr>
 
 
@@ -212,7 +212,7 @@ sub read_cpan_html {
         <td>5.3.7
         <td>Maint</td>
         <td>1996-10-10</td>
-        <td><a href="http://www.cpan.org/src/perl5.003_07.tar.gz">perl5.003_07.tar.gz</a></td>
+        <td><a href="https://www.cpan.org/src/perl5.003_07.tar.gz">perl5.003_07.tar.gz</a></td>
     </tr>
 
 </table>
