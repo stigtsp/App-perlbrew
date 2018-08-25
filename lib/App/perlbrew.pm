@@ -22,6 +22,7 @@ BEGIN {
 use Getopt::Long ();
 use CPAN::Perl::Releases;
 use JSON::PP 'decode_json';
+use Digest::SHA::PurePerl;
 
 use App::Perlbrew::Path;
 use App::Perlbrew::Path::Root;
@@ -1020,9 +1021,11 @@ sub release_detail_perl_local {
     my $tarballs = CPAN::Perl::Releases::perl_tarballs($rd->{version});
     if (keys %$tarballs) {
         for ("tar.bz2", "tar.gz") {
-            if (my $x = $tarballs->{$_}) {
-                $rd->{tarball_name} = (split("/", $x))[-1];
+          if (my $x = $tarballs->{$_}) {
+                my ($author_path, $name) = $x =~ m|(.+)/(.+?)$|;
+                $rd->{tarball_name} = $name;
                 $rd->{tarball_url} = "$mirror/authors/id/$x";
+                $rd->{checksums_url} = "$mirror/authors/id/$author_path/CHECKSUMS";
                 $error = 0;
                 last;
             }
@@ -1049,6 +1052,7 @@ sub release_detail_perl_remote {
                 if ($index =~ /href\s*=\s*"\Q$dist_tarball\E"/ms) {
                     $rd->{tarball_url} = $dist_tarball_url;
                     $rd->{tarball_name} = $dist_tarball;
+                    $rd->{sha256_url} = $dist_tarball.".sha256.txt";
                     $error = 0;
                     return ($error, $rd);
                 }
@@ -1063,14 +1067,16 @@ sub release_detail_perl_remote {
         die "ERROR: Failed to locate perl-${version} tarball.";
     }
 
-    my ($dist_path, $dist_tarball) =
-        $result->{_source}{download_url} =~ m[(/authors/id/.+/(perl-${version}.tar.(gz|bz2|xz)))$];
+    my ($dist_dir, $dist_tarball) =
+        $result->{_source}{download_url} =~ m[(/authors/id/.+/)(perl-${version}.tar.(gz|bz2|xz))$];
     die "ERROR: Cannot find the tarball for perl-$version\n"
-        if !$dist_path and !$dist_tarball;
-    my $dist_tarball_url = "https://cpan.metacpan.org${dist_path}";
+        if !$dist_dir and !$dist_tarball;
+
+    my $url_root = "https://cpan.metacpan.org";
 
     $rd->{tarball_name} = $dist_tarball;
-    $rd->{tarball_url} = $dist_tarball_url;
+    $rd->{tarball_url} = "${url_root}${dist_dir}${dist_tarball}";
+    $rd->{checksums_url} = "${url_root}${dist_dir}CHECKSUMS";
     $error = 0;
 
     return ($error, $rd);
@@ -1653,17 +1659,79 @@ sub run_command_download {
     my $dist_tarball_url = $rd->{tarball_url};
     my $dist_tarball_path = $self->root->dists ($dist_tarball);
 
-    if (-f $dist_tarball_path && !$self->{force}) {
+    my $download = sub {
+      my ($src, $dst) = @_;
+      if (-f $dst && !$self->{force}) {
         print "$dist_tarball already exists\n";
+        return;
+      }
+      print "Download $src to $dst\n" unless $self->{quiet};
+      my $error = http_download($src, $dst);
+      die "ERROR: Failed to download $src\n" if $error;
+    };
+      
+    &$download($dist_tarball_url, $dist_tarball_path);
+
+    if ($rd->{checksums_url}) {
+      &$download($rd->{checksums_url}, "${dist_tarball_path}.CHECKSUMS");
+      verify_checksums($dist_tarball_path);
     }
-    else {
-        print "Download $dist_tarball_url to $dist_tarball_path\n" unless $self->{quiet};
-        my $error = http_download($dist_tarball_url, $dist_tarball_path);
-        if ($error) {
-            die "ERROR: Failed to download $dist_tarball_url\n";
-        }
+
+    if ($rd->{sha256_url}) {
+      &$download($rd->{sha256_url}, "${dist_tarball_path}.sha256.txt");
+      # TODO: Verify sha256.txt
     }
 }
+
+sub verify_checksums {
+  # To verify authors/CHECKSUMS file
+  # (copied from cpanm/Menlo-Legacy/lib/Menlo/CLI/Compat.pm
+  #
+  # TODO: Write tests for valid and invalid CHECKSUMS files
+  # TODO: Clean up code
+  # TODO: Verify gpg key, get PAUSE gpg-key?
+
+  my ($tarball_path) = @_;
+
+  my $chk_file     = "${tarball_path}.CHECKSUMS";
+  my ($tarball_name) = (split("/", $tarball_path))[-1];
+
+  open my $fh, "<$chk_file" or die "$chk_file: $!";
+  my $data = join '', <$fh>;
+  $data =~ s/\015?\012/\n/g;
+
+  require Safe;                 # no fatpack
+  my $chksum = Safe->new->reval($data);
+
+
+  if (!ref $chksum or ref $chksum ne 'HASH') {
+    die "Checksum file downloaded from $chk_file is broken.\n";
+  }
+
+  if (my $sha = $chksum->{$tarball_name}{sha256}) {
+    my $d;
+    eval {
+      require Digest::SHA;
+      $d=Digest::SHA->new("256");
+    };
+    if ($@) {
+      $d = Digest::SHA::PurePerl->new("256");
+    }
+    $d->addfile($tarball_path);
+    my $hex = $d->hexdigest;
+    if ($hex eq $sha) {
+      warn "Checksum for $tarball_path: Verified!\n";
+    } else {
+      warn "Checksum mismatch for $tarball_path\n";
+      return;
+    }
+  } else {
+    warn "Checksum for $tarball_path not found in CHECKSUMS.\n";
+    return;
+  }
+
+}
+
 
 sub purify {
     my ($self, $envname) = @_;

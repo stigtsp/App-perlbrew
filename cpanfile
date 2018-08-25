@@ -5,6 +5,7 @@ requires 'Pod::Parser'          => '1.63';
 requires 'Pod::Usage'           => '1.68';
 requires 'File::Temp'           => '0.2304';
 requires 'JSON::PP'             => '0';
+requires 'Digest::SHA::PurePerl' => '0';
 requires 'local::lib'           => '2.000014';
 requires 'ExtUtils::MakeMaker'  => '6.86';
     
