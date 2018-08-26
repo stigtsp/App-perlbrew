@@ -1479,6 +1479,7 @@ sub do_install_release {
     my $dist_tarball_path = $self->root->dists ($dist_tarball);
 
     if (-f $dist_tarball_path) {
+        $self->verify_checksums($dist_tarball_path);
         print "Using the previously fetched ${dist_tarball}\n"
             if $self->{verbose};
     }
@@ -1660,76 +1661,125 @@ sub run_command_download {
     my $dist_tarball_path = $self->root->dists ($dist_tarball);
 
     my $download = sub {
-      my ($src, $dst) = @_;
-      if (-f $dst && !$self->{force}) {
-        print "$dist_tarball already exists\n";
-        return;
-      }
-      print "Download $src to $dst\n" unless $self->{quiet};
-      my $error = http_download($src, $dst);
-      die "ERROR: Failed to download $src\n" if $error;
+        my ($src, $dst) = @_;
+        if (-f $dst && $self->{force}) {
+            unlink($dst);
+        } elsif (-f $dst) {
+            print "$dist_tarball already exists\n";
+            return;
+        }
+        print "Download $src to $dst\n" unless $self->{quiet};
+        my $error = http_download($src, $dst);
+        die "ERROR: Failed to download $src\n" if $error;
     };
       
     &$download($dist_tarball_url, $dist_tarball_path);
 
     if ($rd->{checksums_url}) {
-      &$download($rd->{checksums_url}, "${dist_tarball_path}.CHECKSUMS");
-      verify_checksums($dist_tarball_path);
+        &$download($rd->{checksums_url}, "${dist_tarball_path}.CHECKSUMS");
+        $self->verify_checksums($dist_tarball_path);
     }
 
     if ($rd->{sha256_url}) {
-      &$download($rd->{sha256_url}, "${dist_tarball_path}.sha256.txt");
-      # TODO: Verify sha256.txt
+        &$download($rd->{sha256_url}, "${dist_tarball_path}.sha256.txt");
+        # TODO: Verify sha256.txt
     }
 }
 
-sub verify_checksums {
-  # To verify authors/CHECKSUMS file
-  # (copied from cpanm/Menlo-Legacy/lib/Menlo/CLI/Compat.pm
-  #
-  # TODO: Write tests for valid and invalid CHECKSUMS files
-  # TODO: Clean up code
-  # TODO: Verify gpg key, get PAUSE gpg-key?
+sub has_gpgv {
+    # TODO: check for gpgv2 (FreeBSD)
+    return `gpgv --version 2>&1` =~ /GnuPG/;
+}
 
-  my ($tarball_path) = @_;
-
-  my $chk_file     = "${tarball_path}.CHECKSUMS";
-  my ($tarball_name) = (split("/", $tarball_path))[-1];
-
-  open my $fh, "<$chk_file" or die "$chk_file: $!";
-  my $data = join '', <$fh>;
-  $data =~ s/\015?\012/\n/g;
-
-  require Safe;                 # no fatpack
-  my $chksum = Safe->new->reval($data);
-
-
-  if (!ref $chksum or ref $chksum ne 'HASH') {
-    die "Checksum file downloaded from $chk_file is broken.\n";
-  }
-
-  if (my $sha = $chksum->{$tarball_name}{sha256}) {
-    my $d;
-    eval {
-      require Digest::SHA;
-      $d=Digest::SHA->new("256");
-    };
-    if ($@) {
-      $d = Digest::SHA::PurePerl->new("256");
+sub gpgv_verify {
+    my $self = shift;
+    my $file = shift;
+    my $keyring = $self->gpg_keyring();
+    if (!-f $keyring) {
+        $self->gpg_update_keyring();
     }
-    $d->addfile($tarball_path);
-    my $hex = $d->hexdigest;
-    if ($hex eq $sha) {
-      warn "Checksum for $tarball_path: Verified!\n";
+    my $ret = system("/usr/bin/env", "gpgv", "-q", "--keyring", $self->gpg_keyring, $file);
+    if ($ret == 0) {
+        print "[ OK ] PGP signature of CHECKSUMS: Verified!\n";
     } else {
-      warn "Checksum mismatch for $tarball_path\n";
-      return;
+        die "PGP signature verification FAILED FOR $file\n";
     }
-  } else {
-    warn "Checksum for $tarball_path not found in CHECKSUMS.\n";
-    return;
-  }
+}
 
+sub gpg_keyring {
+    my $self = shift;
+    my $keyring = joinpath($self->root, 'etc', 'pause-keyring.gpg');
+    return $keyring;
+}
+
+sub gpg_update_keyring {
+     my $self = shift;
+     print "Downloading PAUSE signing keys";
+     my $keyring = $self->gpg_keyring;
+     ###
+     ### XXX TODO: Rewrite properly.
+     ###
+     `curl "http://pgp.mit.edu/pks/lookup?op=get&search=0x328DA867450F89EC" > $keyring.asc`;
+     `gpg --dearmour < $keyring.asc > $keyring`
+
+}
+
+
+
+
+sub verify_checksums {
+    my $self = shift;
+    my $tarball_path = shift;
+
+    # To verify authors/CHECKSUMS file
+    # (copied from cpanm/Menlo-Legacy/lib/Menlo/CLI/Compat.pm
+    #
+    # TODO: Write tests for valid and invalid CHECKSUMS files
+    # TODO: Clean up code
+    # TODO: Verify gpg key, get PAUSE gpg-key?
+
+    my $chk_file     = "${tarball_path}.CHECKSUMS";
+
+    if ($self->has_gpgv) {
+        $self->gpgv_verify($chk_file);
+    } else {
+        die "WARNING: gpgv not installed, cannot verify CHECKSUMS against PAUSE keys\n";
+    }
+
+
+    my ($tarball_name) = (split("/", $tarball_path))[-1];
+
+    open my $fh, "<$chk_file" or die "$chk_file: $!";
+    my $data = join '', <$fh>;
+    $data =~ s/\015?\012/\n/g;
+
+    require Safe;                 # no fatpack
+    my $chksum = Safe->new->reval($data);
+
+    if (!ref $chksum or ref $chksum ne 'HASH') {
+        die "Checksum file downloaded from $chk_file is broken.\n";
+    }
+
+    if (my $sha = $chksum->{$tarball_name}{sha256}) {
+        my $d;
+        eval {
+            require Digest::SHA;
+            $d = Digest::SHA->new("256");
+        };
+        if ($@) {
+            $d = Digest::SHA::PurePerl->new("256");
+        }
+        $d->addfile($tarball_path);
+        my $hex = $d->hexdigest;
+        if ($hex eq $sha) {
+            print "[ OK ] Checksum for $tarball_name: Verified!\n";
+            return 1;
+        } else {
+            die "Checksum mismatch for $tarball_path\n";
+        }
+    } else {
+        die "Checksum for $tarball_name not found in CHECKSUMS.\n";
+    }
 }
 
 
