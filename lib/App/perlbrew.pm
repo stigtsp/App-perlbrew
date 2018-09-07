@@ -4,7 +4,6 @@ use warnings;
 use 5.008;
 our $VERSION = "0.85";
 use Config;
-
 BEGIN {
     # Special treat for Cwd to prevent it to be loaded from somewhere binary-incompatible with system perl.
     my @oldinc = @INC;
@@ -38,6 +37,8 @@ sub min(@) {
 sub uniq {
     my %seen; grep { !$seen{$_}++ } @_;
 }
+
+my $PGP_PAUSE_KEYID = "0x328DA867450F89EC";
 
 ### global variables
 # set $ENV{SHELL} to executable path of parent process (= shell) if it's missing
@@ -116,11 +117,12 @@ sub files_are_the_same {
 }
 
 {
+
     my %commands = (
         curl => {
             test     => '--version >/dev/null 2>&1',
-            get      => '--silent --location --fail -o - {url}',
-            download => '--silent --location --fail -o {output} {url}',
+            get      => '--silent --location --fail -o - "{url}"',
+            download => '--silent --location --fail -o "{output}" "{url}"',
             order    => 1,
 
             # Exit code is 22 on 404s etc
@@ -128,8 +130,8 @@ sub files_are_the_same {
         },
         wget => {
             test     => '--version >/dev/null 2>&1',
-            get      => '--quiet -O - {url}',
-            download => '--quiet -O {output} {url}',
+            get      => '--quiet -O - "{url}"',
+            download => '--quiet -O "{output}" "{url}"',
             order    => 2,
 
             # Exit code is not 0 on error
@@ -137,8 +139,8 @@ sub files_are_the_same {
         },
         fetch => {
             test     => '--version >/dev/null 2>&1',
-            get      => '-o - {url}',
-            download => '-o {output} {url}',
+            get      => '-o - "{url}"',
+            download => '-o "{output}" "{url}"',
             order    => 3,
 
             # Exit code is 8 on 404s etc
@@ -176,6 +178,7 @@ sub files_are_the_same {
         my $ua = http_user_agent_program;
         my $cmd = $ua . " " . $commands{ $ua }->{ $purpose };
         for (keys %$params) {
+            # XXX: Need to shell escape parameter
             $cmd =~ s!{$_}!$params->{$_}!g;
         }
         return ($ua, $cmd) if wantarray;
@@ -191,6 +194,7 @@ sub files_are_the_same {
 
         my $partial = 0;
         local $SIG{TERM} = local $SIG{INT} = sub { $partial++ };
+
 
         my $download_command = http_user_agent_command(download => { url => $url, output => $path });
 
@@ -1668,7 +1672,7 @@ sub run_command_download {
             print "$dist_tarball already exists\n";
             return;
         }
-        print "Download $src to $dst\n" unless $self->{quiet};
+        warn "Download $src to $dst\n" unless $self->{quiet};
         my $error = http_download($src, $dst);
         die "ERROR: Failed to download $src\n" if $error;
     };
@@ -1680,15 +1684,19 @@ sub run_command_download {
         $self->verify_checksums($dist_tarball_path);
     }
 
-    if ($rd->{sha256_url}) {
-        &$download($rd->{sha256_url}, "${dist_tarball_path}.sha256.txt");
-        # TODO: Verify sha256.txt
-    }
 }
 
-sub has_gpgv {
-    # TODO: check for gpgv2 (FreeBSD)
-    return `gpgv --version 2>&1` =~ /GnuPG/;
+sub has_gpg {
+    my $self = shift;
+    my $gpg_cmd = shift || 'gpg';
+    my @options = ("${gpg_cmd}", "${gpg_cmd}2");
+    for my $p (@options) {
+        my $cmd = "$p --version 2>&1";
+        if (qx($cmd) =~ /GnuPG/) {
+            return $p;
+        }
+    }
+    die "[ ERROR ] Can't find any of: ".join(", ", @options);
 }
 
 sub gpgv_verify {
@@ -1698,11 +1706,11 @@ sub gpgv_verify {
     if (!-f $keyring) {
         $self->gpg_update_keyring();
     }
-    my $ret = system("/usr/bin/env", "gpgv", "-q", "--keyring", $self->gpg_keyring, $file);
+    my $ret = system("/usr/bin/env", $self->has_gpg("gpgv"), "-q", "--keyring", $self->gpg_keyring, $file);
     if ($ret == 0) {
         print "[ OK ] PGP signature of CHECKSUMS: Verified!\n";
     } else {
-        die "PGP signature verification FAILED FOR $file\n";
+        die "[ ERROR ] PGP signature verification FAILED FOR $file\n";
     }
 }
 
@@ -1715,12 +1723,16 @@ sub gpg_keyring {
 sub gpg_update_keyring {
      my $self = shift;
      print "Downloading PAUSE signing keys";
+     my $gpg = $self->has_gpg;
      my $keyring = $self->gpg_keyring;
-     ###
-     ### XXX TODO: Rewrite properly.
-     ###
-     `curl "http://pgp.mit.edu/pks/lookup?op=get&search=0x328DA867450F89EC" > $keyring.asc`;
-     `gpg --dearmour < $keyring.asc > $keyring`
+
+     my $keyring_url = "https://pgp.mit.edu/pks/lookup?op=get&search=" . $PGP_PAUSE_KEYID;
+     my $tmp = "$keyring.$$.asc"; # XXX: Replace wth File::Temp
+     http_download($keyring_url, $tmp);
+     my $r = `$gpg --dearmour -o $keyring < $tmp`;
+     unlink($tmp);
+     return $r;
+     
 
 }
 
@@ -1739,13 +1751,11 @@ sub verify_checksums {
     # TODO: Verify gpg key, get PAUSE gpg-key?
 
     my $chk_file     = "${tarball_path}.CHECKSUMS";
-
-    if ($self->has_gpgv) {
+    if ($self->has_gpg) {
         $self->gpgv_verify($chk_file);
     } else {
-        die "WARNING: gpgv not installed, cannot verify CHECKSUMS against PAUSE keys\n";
+        die "[ ERROR ] gpgv not installed, cannot verify CHECKSUMS against PAUSE keys\n";
     }
-
 
     my ($tarball_name) = (split("/", $tarball_path))[-1];
 
@@ -1775,7 +1785,7 @@ sub verify_checksums {
             print "[ OK ] Checksum for $tarball_name: Verified!\n";
             return 1;
         } else {
-            die "Checksum mismatch for $tarball_path\n";
+            die "[ ERROR ] Checksum mismatch for $tarball_path\n";
         }
     } else {
         die "Checksum for $tarball_name not found in CHECKSUMS.\n";
@@ -2185,7 +2195,6 @@ sub local_libs {
 
 sub is_installed {
     my ($self, $name) = @_;
-
     return grep { $name eq $_->{name} } $self->installed_perls;
 }
 
