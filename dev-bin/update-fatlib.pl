@@ -12,6 +12,7 @@ local/lib.pm
 Capture/Tiny.pm
 CPAN/Perl/Releases.pm
 JSON/PP.pm
+Digest/SHA/PurePerl.pm
 MODULES
 
 my $packer = App::FatPacker->new;
