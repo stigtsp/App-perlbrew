@@ -1754,7 +1754,7 @@ sub run_command_download_keyring {
 sub verify_tarball {
     my ($self, $tarball_path, $chk_file) = @_;
 
-    $chk_file //= $tarball_path.".CHECKSUMS";
+    $chk_file ||= $tarball_path.".CHECKSUMS";
 
     if ($self->has_gpg) {
         $self->gpgv_verify($chk_file);
