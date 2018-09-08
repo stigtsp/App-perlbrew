@@ -1,0 +1,36 @@
+0&&<<''; # this PGP-signed message is also valid perl
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+$cksum = {
+  'test.tar.gz' => {
+    'md5' => '006ccca75e9d69d661590c2974e6e368',
+    'mtime' => '1970-01-01',
+    'sha256' => '5fb5eb4a220457cb5c298b82b54066f6a557858183a3ad0ae838049d0651ea72',
+    'size' => 145,
+  },
+  'corrupt.tar.gz' => {
+    'md5' => '006ccca75e9d69d661590c2974e6e368',
+    'mtime' => '1970-01-01',
+    'sha256' => '5fb5eb4a220457cb5c298b82b54066f6a557858183a3ad0ae838049d0651ea72',
+    'size' => 145,
+  }
+}
+__END__
+
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEj7OMIAQn+GdSU5z5EMg4owYJR3UFAluT95UACgkQEMg4owYJ
+R3VlKQ//XTr0Ruq6WvRtUmfo0HOQmwjFw5ERN+N1koqUkcwyf35vo15UBikxglBD
+N7Gx86h1RIuDb9LVhvdOz4R8UTErSboV+SN4E7PAVsqt8vbWsMrLM3X7N1V+lp94
+1zzHSFQAuU+1gvNslhxzzYQ0lHuZI0ieTAuqdT8na9rB/eyD+tFrJU9WouMyn+YM
+Dwal6/MgouMDVWzqadVmBBi0bFueRjkChqrBiTc0rqic9eTfhNIIPxlnnGWblEUW
+UrdFzUxMNN1sVxgMbm14f6KbEfeVPyQqkO31cL1u5kITltFc4EXR0ezxCEOCKOWs
+nJIZfWxpvLjVTgqUxMP53JCjstFjxqn2mSMwI4cm93xpw7U0R1c1Lcng7sTYyPCs
+eIQFqM1ly8F2ccdtavXbAcGXzXCUKfGDk64WHqn66Evkx+I+CSvtPcGZhzbVxcwr
+flxg4pFXYsCsaLYK7xZ5yY/IUNCRcSsAdAxjD0QeJsGYiOu2NpyYX54G4DsTXlo0
+b1EZ45V9gcRiPnWX4c7Htn0w5AgUMlV4IxN3NYWA3pBkXPQ3u4LfPdfaBSDpcKh5
+yJxhmUTy8kM9cwiRu+Ky9Sea/a0QoBlE9TfTB/k6KAlAqm13KpYFl9/Nzb9RpOiu
+m2d36nGLdrirqEhXL9dZNc/DjeY0z3asA8MfXxhlIp3FKlJwk7E=
+=CkpW
+-----END PGP SIGNATURE-----

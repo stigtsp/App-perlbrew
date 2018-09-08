@@ -1,0 +1,20 @@
+0&&<<''; # this PGP-signed message is also valid perl
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA1
+
+print <<'EOT'
+                 (__) 
+                 (oo) 
+           /------\/ 
+          / |    ||   
+         *  /\---/\ 
+            ~~   ~~   
+..."Have you mooed today?"...
+__END__
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v2.0.14 (GNU/Linux)
+
+iEYEARECAAYFAluTjmkACgkQMo2oZ0UPiexe1QCfROFk4d2A0fI8W6vWP0rseNIw
+LU4AoIJr71KWYlTRb7DN4bW41sdDGIlS
+=oibJ
+-----END PGP SIGNATURE-----
