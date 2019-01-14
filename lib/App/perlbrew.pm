@@ -1698,23 +1698,36 @@ sub has_gpg {
     return;
 }
 
-sub gpgv_verify {
+sub gpgv_verified_output {
     my $self = shift;
     my $file = shift;
     my $keyring = shift || $self->keyring();
 
-    die "[ ERROR ] cannot gpgv_verify non existing file: $file" unless -f $file;
-    die "[ ERROR ] keyring $keyring does not exist, download it using $0 download-keyring" unless -f $keyring;
+    die "[ ERROR ] cannot gpgv_verify non existing file: $file"
+        unless -f $file;
+    die "[ ERROR ] keyring $keyring does not exist, download it using $0 download-keyring"
+        unless -f $keyring;
 
-    my $ret = system($self->has_gpg("gpgv"), "-q", "--logger-fd=1", "--keyring", $keyring, $file);
+    my $fail = sub {
+        die "[ ERROR ] PGP signature verification FAILED for $file: ".shift."\n";
+    };
 
-    # TODO: Display output from gpgv KEYID etc.
-    if ($ret == 0) {
-        print "[ OK ] PGP signature of CHECKSUMS: Verified!\n";
-    } else {
-        die "[ ERROR ] PGP signature validation FAILED FOR $file\n";
-    }
-    return 1;
+    my @cmd = ($self->has_gpg("gpgv"),
+               "-q", "--logger-fd=2",
+               "--keyring", $keyring,
+               "--output", '-',
+               $file);
+    
+
+    open(my $gpg_p, '-|', @cmd) or &$fail($!);
+    my $verified_output = do { local undef $/; <$gpg_p> };
+    close $gpg_p;
+
+    my $exit = $? >> 8;
+    &$fail("Exit $exit") if $exit;
+    &$fail("No output") unless $verified_output;
+
+    return $verified_output;
 }
 
 sub keyring {
@@ -1756,31 +1769,30 @@ sub verify_tarball {
 
     $chk_file ||= $tarball_path.".CHECKSUMS";
 
+    my $chk_str;
     if ($self->has_gpg) {
-        $self->gpgv_verify($chk_file);
+        $chk_str = $self->gpgv_verified_output($chk_file);
     } else {
-        warn "[ WARNING ] gpg not installed, cannot verify CHECKSUMS against PAUSE signing keys\n";
+        die "[ ERROR ] gpg not installed, cannot verify CHECKSUMS against PAUSE signing keys\n";
     }
 
-    return $self->digest_verify($tarball_path, $chk_file);
+    return $self->digest_verify($tarball_path, $chk_str);
 }
 
 sub digest_verify {
-    my ($self, $tarball_path, $chk_file) = @_;
+    my ($self, $tarball_path, $chk_str) = @_;
 
     # To verify autxhors/CHECKSUMS file
     # (copied/pasted from cpanm/Menlo-Legacy/lib/Menlo/CLI/Compat.pm)
 
     my ($tarball_name) = (split("/", $tarball_path))[-1];
 
-    open my $fh, "<$chk_file" or die "$chk_file: $!";
-    my $data = join '', <$fh>;
-    $data =~ s/\015?\012/\n/g;
+    $chk_str =~ s/\015?\012/\n/g;
 
     require Safe;                 # no fatpack
-    my $chksum = Safe->new->reval($data);
+    my $chksum = Safe->new->reval($chk_str);
     if (!ref $chksum or ref $chksum ne 'HASH') {
-        die "[ ERROR ] $chk_file does not contain expected data\n";
+        die "[ ERROR ] \$chk_str does not contain expected data\n";
     }
     if (my $sha = $chksum->{$tarball_name}{sha256}) {
         my $d;

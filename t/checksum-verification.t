@@ -7,15 +7,29 @@ use App::perlbrew;
 require "test_helpers.pl";
 use File::Spec;
 use Test::Exception;
-use Test::More tests => 12;
+use Test::More tests => 13;
 use File::Temp 'tempfile';
 
 my $app = App::perlbrew->new;
 
 my $testdir = $FindBin::Bin;
-sub tfn { return File::Spec->catfile($testdir, shift) };
+sub tfn { return File::Spec->catfile($testdir, "verification", shift) }
+sub slurp {
+    my $fn = shift;
+    local undef $/;
+    open(my $fh, $fn);
+    my $r = <$fh>;
+    return $r;
+}
+sub strip_clearsign {
+    my $d = shift;
+    my ($msg) = $d =~ m/.*-----BEGIN PGP SIGNED MESSAGE-----\nHash:.+?\n\n(.+?)-----BEGIN PGP SIGNATURE-----/sg;
+    die "no msg" unless defined $msg && $msg;
+    return $msg;
+}
 
-my $sigfailre = qr/PGP signature validation FAILED/;
+
+my $sigfailre = qr/PGP signature verification FAILED/;
 my $chkfailre = qr/Checksum verification FAILED/;
 
 my ($wh, $pause_keyring) = tempfile(CLEANUP => 1);
@@ -23,41 +37,48 @@ print $wh $app->PAUSE_PGP_KEYRING;
 
 
 lives_ok {
-    $app->digest_verify(tfn('test.tar.gz'), tfn('CHECKSUMS-test-sig'))
+    $app->digest_verify(tfn('test.tar.gz'), slurp(tfn('CHECKSUMS-test-sig')))
 } 'CHECKSUMS against test.tar.gz';
 
 throws_ok {
-    $app->digest_verify(tfn('corrupt.tar.gz'), tfn('CHECKSUMS-test-sig'))
+    $app->digest_verify(tfn('corrupt.tar.gz'), slurp(tfn('CHECKSUMS-test-sig')))
 } $chkfailre,'CHECKSUMS against corrupt.tar.gz';
 
 skip "The following tests needs gpg installed", 10 unless $app->has_gpg;
 # gpgv verification of CHECKSUMS signature
 
 lives_and {
-    is $app->gpgv_verify(tfn('CHECKSUMS-pause-sig'), $pause_keyring), 1;
+    my $d = tfn('CHECKSUMS-pause-sig');
+    is $app->gpgv_verified_output($d, $pause_keyring), strip_clearsign(slurp($d));
 } 'Valid CHECKSUMS against valid keyring lives';
 
 throws_ok {
-    $app->gpgv_verify(tfn('CHECKSUMS-invalid-data'), $pause_keyring);
+    $app->gpgv_verified_output(tfn('CHECKSUMS-invalid-data'), $pause_keyring);
 } $sigfailre, 'Invalid CHECKSUMS against valid keyring dies';
 
 throws_ok {
-    $app->gpgv_verify(tfn('CHECKSUMS-test-sig'), $pause_keyring);
+    $app->gpgv_verified_output(tfn('CHECKSUMS-test-sig'), $pause_keyring);
 } $sigfailre, 'Invalid CHECKSUMS against correct keyring dies';
 
 throws_ok {
-    $app->gpgv_verify(tfn('CHECKSUMS-pause-sig'), tfn('keyring-test.gpg'));
+    $app->gpgv_verified_output(tfn('CHECKSUMS-pause-sig'), tfn('keyring-test.gpg'));
 } $sigfailre, 'Valid CHECKSUMS against keyring with invalid key dies';
 
 throws_ok {
-    $app->gpgv_verify(tfn('CHECKSUMS-test-unsigned'),tfn('keyring-test.gpg'));
+    $app->gpgv_verified_output(tfn('CHECKSUMS-test-unsigned'),tfn('keyring-test.gpg'));
 } $sigfailre, 'Unsigned CHECKSUMS dies';
 
 
 lives_and {
-    is $app->gpgv_verify(tfn('CHECKSUMS-test-sig'), tfn('keyring-test.gpg')), 1;
-} 'Test signed CHECKSUMS against test signed keyring lives';
+    my $d = tfn('CHECKSUMS-test-sig');
+    is $app->gpgv_verified_output(tfn('CHECKSUMS-test-sig'), tfn('keyring-test.gpg')), strip_clearsign(slurp($d));
+} 'Test signed CHECKSUMS against test keyring lives';
 
+lives_and {
+    my $chkf = tfn('CHECKSUMS-test-sig-evil-code');
+    my $data = $app->gpgv_verified_output($chkf, tfn('keyring-test.gpg'));
+    unlike $data, qr/EVIL CODE/, 'No EVIL CODE';
+} 'Test signed CHECKSUMS with EVIL CODE against test keyring lives, and doesnt contain EVIL CODE';
 
 # wrapper
 my $orig_keyring = \&App::perlbrew::keyring;
