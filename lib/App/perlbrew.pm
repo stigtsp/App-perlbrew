@@ -1703,36 +1703,40 @@ sub gpgv_verified_output {
     my $file = shift;
     my $keyring = shift || $self->keyring();
 
-    die "[ ERROR ] cannot gpgv_verify non existing file: $file"
+    die "[ ERROR ] cannot gpgv non existing file: $file"
         unless -f $file;
     die "[ ERROR ] keyring $keyring does not exist, download it using $0 download-keyring"
         unless -f $keyring;
 
     my $fail = sub {
-        die "[ ERROR ] PGP signature verification FAILED for $file: ".shift."\n";
+        die "[ ERROR ] PGP signature verification FAILED for $file\n\nError output:\n".shift."\n\n";
     };
 
     my @cmd = ($self->has_gpg("gpgv"),
-               "-q", "--logger-fd=2",
+               "-q", "--logger-fd=2", "--status-fd=2",
                "--keyring", $keyring,
                "--output", '-',
                $file);
-    
 
-    open(my $gpg_p, '-|', @cmd) or &$fail($!);
-    my $verified_output = do { local undef $/; <$gpg_p> };
-    close $gpg_p;
+    # in perl 5.10.0, need IPC::Open3 for 5.8 :(
+    my $has_ipc_cmd = eval { require IPC::Cmd; 1 };
+    die "[ ERROR ] Needs IPC::Cmd for gpgv verification\n" unless $has_ipc_cmd;
 
-    my $exit = $? >> 8;
-    &$fail("Exit $exit") if $exit;
-    &$fail("No output") unless $verified_output;
+    my ( $success, $exit, $full_buf, $stdout_buf, $stderr_buf
+     ) = IPC::Cmd::run( command => \@cmd, verbose => 0 );
+
+    my $verified_output = join '', @$stdout_buf;
+
+    &$fail(join("\n", @$stderr_buf)) unless $success;
+    &$fail("No verified output") unless $verified_output;
+
 
     return $verified_output;
 }
 
 sub keyring {
     my $self = shift;
-    my $keyring = joinpath($self->root, 'etc', 'pause-keyring.gpg');
+    my $keyring = App::Perlbrew::Path::Root->new('etc', 'pause-keyring.gpg')->stringify;
     return $keyring;
 }
 
